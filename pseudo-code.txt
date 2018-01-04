@@ -1,0 +1,60 @@
+LC.sol
+buyer
+seller
+importers bank
+exporters bank
+
+1. Create & Store Letter of Credit on blockchain
+2. Importer's bank approve or reject LC
+3. Exporter's bank approve or reject LC
+4. (if approved) Letter of credit can be viewed by Seller
+5. Seller completes shipment, adds invoice, export application data, photo image of any other required documents (documents stored on the blockchain)
+6. Exporter's bank approves/reject the application
+7. 
+
+LetterCredit.sol
+
+address buyer
+address seller
+address buyerBank
+address sellerBank
+uint32 saleContractHash
+int creditAmount
+boolean approvedByBuyerBank
+
+constructor (seller, saleContractHash) {
+	buyer = msg.sender
+	seller = seller
+	saleContractHash = saleContractHash
+}
+
+setBuyerBank(buyerBank) {
+	// buyer only
+	buyerBank = buyerBank
+}
+
+setSellerBank(sellerBank) {
+	// seller only
+	sellerBank = sellerBank
+}
+
+requestForCredit(creditAmount) {
+	creditAmount = creditAmount
+	// launch event for bank
+}
+
+processCreditRequest(approved) {
+	// buyerBankOnly
+	approvedByBuyerBank = approved
+	// send credits to contract // if approved
+	// destroy contract // if denied
+	// event for sellerBank: creditAvailable , when is credit available
+)
+
+approveProcessLetterOfCredit(approved) {
+	// store hash of shipment, invoice, application data
+}
+
+transactionFromBuyerBankToSeller() {
+	
+}
