@@ -1,77 +1,98 @@
 pragma solidity ^0.4.0;
 
-contract Owned  {
-  address owner;
 
-  modifier onlyOwner() {
-    if (msg.sender==owner) _;
-  }
+contract Owned {
+    address owner;
 
-  function owned() {
-    owner = msg.sender;
-  }
+    modifier onlyOwner() {
+        if (msg.sender == owner) _;
+    }
 
-  function changeOwner(address newOwner) onlyOwner {
-    owner = newOwner;
-  }
+    function owned() {
+        owner = msg.sender;
+    }
 
-  function getOwner() constant returns (address){
-    return owner;
-  }
+    function changeOwner(address newOwner) onlyOwner {
+        owner = newOwner;
+    }
+
+    function getOwner() constant returns (address){
+        return owner;
+    }
 }
+
 
 contract LetterOfCredit is Owned {
     //State Machine, stages in the LoC
     enum Stages {
-        LOApplication,
-        ImporterBankApproval,
-        ExporterBankApproval,
-        ExporterValidation,
-        Shipment,
-        ReviewDocuments,
-        ImporterReviewDocuments,
-        Completed,
-        Failed
+    LOCApplicationStart,
+    ImporterBankApproval,
+    ExporterBankApproval,
+    ExporterValidation,
+    Shipment,
+    ReviewDocuments,
+    ImporterReviewDocuments,
+    Completed,
+    Failed
     }
-    
-   
-    address public buyer;
-    address public seller;
-    address public buyerBank; //store the bank addresses
-    address public sellerBank;
-    
-    uint256 saleContractHash;
-    
-    bool validatedByBuyerBank;
-    bool validatedBySellerBank;
-    
-    mapping (uint256 => bytes32) documentHashes;
-    mapping (uint256 => bytes32) photoHashes;
-    
+
+    uint80 constant None = uint80(0);
+
+    address public importer;
+
+    address public exporter;
+
+    address public importerBank; //store the bank addresses
+    address public exporterBank;
+
+    bytes32 saleContractHash;
+
+    bool validatedByImporterBank;
+
+    bool validatedByExporterBank;
+
+    bool exporterHasWithdrawn;
+
+    bool importerBankHasWithdrawn;
+
+    uint32 private amount;
+
+    uint public etherAmount;
+
+    mapping (uint32 => bytes32) documentHashes;
+
+    mapping (uint32 => bytes32) photoHashes;
+
+    mapping (address => uint) pendingWithdrawals;
+
     // This is the current stage.
-    Stages public stage = Stages.LOApplication;
-    
-    function LetterOfCredit(address _seller, uint256 _saleContractHash, address _buyerBank, address _sellerBank) public {
+    Stages public stage = Stages.LOCApplicationStart;
+
+    function LetterOfCredit(address _exporter, address _importerBank, address _exporterBank) public {
+        if (_exporter == 0) throw;
+        if (_importerBank == 0) throw;
+        if (_exporterBank == 0) throw;
         owned();
-        buyer = msg.sender;
-        seller = _seller;
-        buyerBank = _buyerBank;
-        sellerBank = _sellerBank;
-        saleContractHash = _saleContractHash;
+        importer = msg.sender;
+        exporter = _exporter;
+        importerBank = _importerBank;
+        exporterBank = _exporterBank;
+        amount = _amount;
     }
-    
-    
+
+
     /**
      * Events 
      */
     event ProofCreated(
-        uint256 indexed id,
-        bytes32 documentHash
+    uint256 indexed id,
+    bytes32 documentHash
     );
+
     event requestApproval(address _forBank); //Request approval from _forBank
     event reviewRequirements(address _forAddress); //request a review by _forAddress
     event reviewDocuments(address _forAddress); //request a review of documents by _forAddress
-    
+
     /**
      * Restrictions
      */
@@ -79,23 +100,7 @@ contract LetterOfCredit is Owned {
         require(msg.sender == _account);
         _;
     }
-    /*
-    modifier onlyBuyer {
-        require(msg.sender == buyer);
-        _;
-    }
-    
-    modifier onlySeller {
-        require(msg.sender == seller);
-        _;
-    }
-    */
-    //NOT NEEDE FOR NOW BECAUSE OF STATE MACHINE
-    modifier noHashExistsYet(uint256 id) {
-        require(documentHashes[id] == "");
-        _;
-    }
-    
+
     //Modifier to restrict access to function in certain stages
     modifier atStage(Stages _stage) {
         require(stage == _stage);
@@ -108,109 +113,126 @@ contract LetterOfCredit is Owned {
         nextStage();
     }
 
-    
+
     //proof of existence
-    function addPurchaseOrder(bytes32 _purchaseOrderHash) onlyBy(buyer) atStage(Stages.LOApplication) transitionNext external{
-        documentHashes[1] = _purchaseOrderHash;
-        //change contract owner to buyerBank so they can validate the documentHashes
-        changeOwner(buyerBank);
-        requestApproval(buyerBank);
-    }
-    
-    //approval functions is the same, only the 'owner' and stage is different...
-    function approvePurchaseOrder(bool isApproved) onlyBy(buyerBank) atStage(Stages.ImporterBankApproval) external{
-        if(!isApproved){
-            // Bank did not approve, end
-            stage = Stages.Failed;
-            throw;
-        }
-        //change owner of the contract, so the sellerBank can validate the documentHashes
-        changeOwner(sellerBank);
-        //move to next Stages
-        //didn't use the modifier cause i'm not 100% sure it will work as intended.
-        requestApproval(sellerBank);
-        nextStage();
+    function addPurchaseOrder(bytes32 _purchaseOrderHash, uint32 amount) onlyBy(importer) atStage(Stages.LOCApplicationStart) transitionNext external {
+        amount = _amount;
+        documentHashes[0] = _purchaseOrderHash;
+        //change contract owner to importerBank so they can validate the documentHashes
+        changeOwner(importerBank);
+        requestApproval(importerBank);
     }
 
-    function approvePurchaseOrderSeller(bool isApproved) onlyBy(sellerBank) atStage(Stages.ExporterBankApproval) external{
-        if(!isApproved){
+    //approval functions is the same, only the 'owner' and stage is different...
+    function approvePurchaseOrderImporterBank(bool _isApproved) onlyBy(importerBank) atStage(Stages.ImporterBankApproval) transitionNext external payable returns (bool) {
+        if (!_isApproved) {
             // Bank did not approve, end
             stage = Stages.Failed;
             throw;
         }
-        //Change owner back to seller so he can review the LoC (not mandatory)
-        changeOwner(seller);
-        //move to next Stages and fire event
-        reviewRequirements(seller);
-        nextStage();
+        if (msg.value < amount) throw;
+
+        etherAmount = msg.value;
+        pendingWithdrawals[exporter] = amount;
+        pendingWithdrawals[importerBank] = msg.value - amount;
+        //change owner of the contract, so the exporterBank can validate the documentHashes
+        changeOwner(exporterBank);
+        requestApproval(exporterBank);
+        return true;
     }
-    
-    function approveShippment(bool isApproved) onlyBy(sellerBank) atStage(Stages.ReviewDocuments) external{
-        if(!isApproved){
+
+    function approvePurchaseOrderExporterBank(bool isApproved) onlyBy(exporterBank) atStage(Stages.ExporterBankApproval) transitionNext external {
+        if (!isApproved) {
             // Bank did not approve, end
             stage = Stages.Failed;
             throw;
         }
-        //Change owner back to seller so he can review the LoC (not mandatory)
-        changeOwner(buyerBank);
-        //move to next Stages and fire event
-        ReviewDocuments(buyerBank);
-        nextStage();
+        //Change owner back to exporter so he can review the LoC (not mandatory)
+        changeOwner(exporter);
+        reviewRequirements(exporter);
     }
-    
-    function approveShippmentByImporter(bool isApproved) onlyBy(buyerBank) atStage(Stages.ImporterReviewDocuments) external{
-        if(!isApproved){
-            // Bank did not approve, end
+
+    //the exporter has added all required documentsvia the addPhoto function to the contract
+    function completeShipment(bytes32 _invoiceHash, bytes32 _exportDataHash) onlyBy(owner) atStage(Stages.Shipment) transitionNext external {
+        if (_invoiceHash == "") {
             stage = Stages.Failed;
-            //REFUND THE MONEY?
             throw;
         }
-        
+
+        if (_exportDataHash == "") {
+            stage = Stages.Failed;
+            throw;
+        }
+        documentHashes[1] = _invoiceHash;
+        documentHashes[2] = _exportDataHash;
+        changeOwner(exporterBank);
+        reviewDocuments(exporterBank);
+    }
+
+    function approveShipmentByExporterBank(bool _isApproved) onlyBy(exporterBank) atStage(Stages.ReviewDocuments) transitionNext external {
+        if (!_isApproved) {
+            // Bank did not approve, end
+            stage = Stages.Failed;
+            throw;
+        }
+        //Change owner back to exporter so he can review the LoC (not mandatory)
+        changeOwner(importerBank);
+        ReviewDocuments(importerBank);
+    }
+
+    function approveShipmentByImporterBank(bool _isApproved) onlyBy(importerBank) atStage(Stages.ImporterReviewDocuments) transitionNext external {
+        if (!_isApproved) {
+            // Bank did not approve, end
+            stage = Stages.Failed;
+            //REFUND THE MONEY? --> mortal pattern?
+            throw;
+        }
         //THE end
-        //PAY the seller NOW
+        //PAY the exporter NOW
     }
-    
-    
+
+
     function addPhotoEvidence(uint photoNumber, bytes32 photoHash) onlyBy(owner) atStage(Stages.Shipment) external {
         photoHashes[photoNumber] = photoHash;
     }
-    //the seller has added all required documentsvia the addPhoto function to the contract
-    function completeShipment(bytes32 _invoiceHash, bytes32 _exportDataHash) onlyBy(owner) atStage(Stages.Shipment) external {
-        if(_invoiceHash == ""){
-            stage = Stages.Failed;
-            throw;
+
+    function validateDocument(uint _id, bytes32 documentHash) onlyBy(owner) external view returns (bool) {
+        return documentHashes[_id] == documentHash;
+    }
+
+    function validatePhotoEvidence(uint _photoNumber, bytes32 _photoHash) onlyBy(owner) external view returns (bool) {
+        return documentHashes[_photoNumber] == _photoHash;
+    }
+
+    function checkAmount() external view returns (uint) {
+        return amount;
+    }
+
+    function withdraw() atStage(Stages.Completed) external returns (bool) {
+        uint amountToWithdraw = pendingWithdrawals[msg.sender];
+        // Remember to zero the pending refund before
+        // sending to prevent re-entrancy attacks
+        pendingWithdrawals[msg.sender] = 0;
+        if (msg.sender.transfer(amountToWithdraw)) return true;
+        pendingWithdrawals[msg.sender] = amountToWithdraw;
+        return false;
+    }
+
+    function recoverFunds() onlyBy(importerBank) atStage(Stages.Failed) external returns (bool) {
+        uint toRecover = etherAmount;
+        etherAmount = 0;
+        if(msg.sender.transfer(toRecover)) {
+            return true;
+        } else {
+            etherAmount = toRecover;
+            return false;
         }
-        
-        if(_exportDataHash == ""){
-            stage = Stages.Failed;
-            throw;
-        }
-        documentHashes[2] = _invoiceHash;
-        documentHashes[3] = _exportDataHash;
-        changeOwner(sellerBank);
-        reviewDocuments(sellerBank);
-        nextStage();
     }
-    
-    function validatePurchaseOrder(bytes32 documentHash) onlyBy(owner) external view returns (bool) {
-        return documentHashes[1] == documentHash;
-    }
-    function validatePhotoEvidence(uint photoNumber, bytes32 photoHash) onlyBy(owner) external view returns (bool) {
-        return documentHashes[photoNumber] == photoHash;
-    }
-    
-    // withdrawel pattern == zorgen dat de seller zijn geld krijgt
-    // TODO: betere naam voor deze functie
-    function creditSeller() external onlyBy(seller) {
-        if(!seller.send(this.balance))
-        throw;
-    }
-    
-    
+
     function nextStage() internal {
         stage = Stages(uint(stage) + 1);
     }
-    
+
     // rejector
-    function() public { throw; }
+    function() public {throw;}
 }
