@@ -139,8 +139,8 @@ contract LetterOfCredit is Owned {
         return true;
     }
 
-    function approvePurchaseOrderExporterBank(bool isApproved) onlyBy(exporterBank) atStage(Stages.ExporterBankApproval) transitionNext external {
-        if (!isApproved) {
+    function approvePurchaseOrderExporterBank(bool _isApproved) onlyBy(exporterBank) atStage(Stages.ExporterBankApproval) transitionNext external {
+        if (!_isApproved) {
             // Bank did not approve, end
             stage = Stages.Failed;
             throw;
