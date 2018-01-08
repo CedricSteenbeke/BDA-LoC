@@ -1,6 +1,12 @@
 pragma solidity ^0.4.0;
 
 
+contract Mortal {
+  function kill(_account) internal{
+    if (msg.sender == owner) suicide(_account);
+  }
+}
+
 contract Owned {
     address owner;
 
@@ -22,18 +28,18 @@ contract Owned {
 }
 
 
-contract LetterOfCredit is Owned {
+contract LetterOfCredit is Owned, Mortal {
     //State Machine, stages in the LoC
     enum Stages {
-    LOCApplicationStart,
-    ImporterBankApproval,
-    ExporterBankApproval,
-    ExporterValidation,
-    Shipment,
-    ReviewDocuments,
-    ImporterReviewDocuments,
-    Completed,
-    Failed
+        LOCApplicationStart,
+        ImporterBankApproval,
+        ExporterBankApproval,
+        ExporterValidation,
+        Shipment,
+        ReviewDocuments,
+        ImporterReviewDocuments,
+        Completed,
+        Failed
     }
     Stages stages;
 
@@ -90,6 +96,7 @@ contract LetterOfCredit is Owned {
     event requestApproval(address _forBank); //Request approval from _forBank
     event reviewRequirements(address _forAddress); //request a review by _forAddress
     event reviewDocuments(address _forAddress); //request a review of documents by _forAddress
+    event shipmentFinished(address _forAddress); //
 
     /**
      * Restrictions
@@ -143,6 +150,7 @@ contract LetterOfCredit is Owned {
         if (!_isApproved) {
             // Bank did not approve, end
             stage = Stages.Failed;
+            kill(importerBank);
             throw;
         }
         //Change owner back to exporter so he can review the LoC (not mandatory)
@@ -171,6 +179,7 @@ contract LetterOfCredit is Owned {
         if (!_isApproved) {
             // Bank did not approve, end
             stage = Stages.Failed;
+            kill(importerBank);
             throw;
         }
         //Change owner back to exporter so he can review the LoC (not mandatory)
@@ -182,11 +191,11 @@ contract LetterOfCredit is Owned {
         if (!_isApproved) {
             // Bank did not approve, end
             stage = Stages.Failed;
-            //REFUND THE MONEY? --> mortal pattern?
+            kill(importerBank);
             throw;
         }
-        //THE end
         //PAY the exporter NOW
+        shipmentFinished(importer);
     }
 
 
