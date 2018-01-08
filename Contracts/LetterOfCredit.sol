@@ -77,7 +77,6 @@ contract LetterOfCredit is Owned {
         exporter = _exporter;
         importerBank = _importerBank;
         exporterBank = _exporterBank;
-        amount = _amount;
     }
 
 
@@ -97,13 +96,13 @@ contract LetterOfCredit is Owned {
      * Restrictions
      */
     modifier onlyBy(address _account) {
-        require(msg.sender == _account);
+        if(msg.sender != _account) throw;
         _;
     }
 
     //Modifier to restrict access to function in certain stages
     modifier atStage(Stages _stage) {
-        require(stage == _stage);
+        if(stage != _stage) throw; 
         _;
     }
     // This modifier goes to the next stage
@@ -196,15 +195,15 @@ contract LetterOfCredit is Owned {
         photoHashes[photoNumber] = photoHash;
     }
 
-    function validateDocument(uint _id, bytes32 documentHash) onlyBy(owner) external view returns (bool) {
+    function validateDocument(uint _id, bytes32 documentHash) onlyBy(owner) external returns (bool) {
         return documentHashes[_id] == documentHash;
     }
 
-    function validatePhotoEvidence(uint _photoNumber, bytes32 _photoHash) onlyBy(owner) external view returns (bool) {
+    function validatePhotoEvidence(uint _photoNumber, bytes32 _photoHash) onlyBy(owner) external returns (bool) {
         return documentHashes[_photoNumber] == _photoHash;
     }
 
-    function checkAmount() external view returns (uint) {
+    function checkAmount() external returns (uint) {
         return amount;
     }
 
