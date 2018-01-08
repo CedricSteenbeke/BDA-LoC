@@ -35,6 +35,7 @@ contract LetterOfCredit is Owned {
     Completed,
     Failed
     }
+    Stages stages;
 
     address public importer;
 
@@ -224,6 +225,10 @@ contract LetterOfCredit is Owned {
             etherAmount = toRecover;
             return false;
         }
+    }
+    
+    function getStage() returns (uint s) {
+        return uint256(stages);
     }
 
     function nextStage() internal {
