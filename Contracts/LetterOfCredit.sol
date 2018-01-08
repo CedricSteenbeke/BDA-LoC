@@ -36,8 +36,6 @@ contract LetterOfCredit is Owned {
     Failed
     }
 
-    uint80 constant None = uint80(0);
-
     address public importer;
 
     address public exporter;
@@ -55,15 +53,15 @@ contract LetterOfCredit is Owned {
 
     bool importerBankHasWithdrawn;
 
-    uint32 private amount;
+    uint256 private amount;
 
-    uint public etherAmount;
+    uint256 public etherAmount;
 
     mapping (uint32 => bytes32) documentHashes;
 
     mapping (uint32 => bytes32) photoHashes;
 
-    mapping (address => uint) pendingWithdrawals;
+    mapping (address => uint256) pendingWithdrawals;
 
     // This is the current stage.
     Stages public stage = Stages.LOCApplicationStart;
@@ -114,7 +112,7 @@ contract LetterOfCredit is Owned {
 
 
     //proof of existence
-    function addPurchaseOrder(bytes32 _purchaseOrderHash, uint32 amount) onlyBy(importer) atStage(Stages.LOCApplicationStart) transitionNext external {
+    function addPurchaseOrder(bytes32 _purchaseOrderHash, uint256 _amount) onlyBy(importer) atStage(Stages.LOCApplicationStart) transitionNext external {
         amount = _amount;
         documentHashes[0] = _purchaseOrderHash;
         //change contract owner to importerBank so they can validate the documentHashes
@@ -176,7 +174,7 @@ contract LetterOfCredit is Owned {
         }
         //Change owner back to exporter so he can review the LoC (not mandatory)
         changeOwner(importerBank);
-        ReviewDocuments(importerBank);
+        reviewDocuments(importerBank);
     }
 
     function approveShipmentByImporterBank(bool _isApproved) onlyBy(importerBank) atStage(Stages.ImporterReviewDocuments) transitionNext external {
@@ -191,19 +189,19 @@ contract LetterOfCredit is Owned {
     }
 
 
-    function addPhotoEvidence(uint photoNumber, bytes32 photoHash) onlyBy(owner) atStage(Stages.Shipment) external {
+    function addPhotoEvidence(uint32 photoNumber, bytes32 photoHash) onlyBy(owner) atStage(Stages.Shipment) external {
         photoHashes[photoNumber] = photoHash;
     }
 
-    function validateDocument(uint _id, bytes32 documentHash) onlyBy(owner) external returns (bool) {
+    function validateDocument(uint32 _id, bytes32 documentHash) onlyBy(owner) external returns (bool) {
         return documentHashes[_id] == documentHash;
     }
 
-    function validatePhotoEvidence(uint _photoNumber, bytes32 _photoHash) onlyBy(owner) external returns (bool) {
+    function validatePhotoEvidence(uint32 _photoNumber, bytes32 _photoHash) onlyBy(owner) external returns (bool) {
         return documentHashes[_photoNumber] == _photoHash;
     }
 
-    function checkAmount() external returns (uint) {
+    function checkAmount() external returns (uint256) {
         return amount;
     }
 
@@ -212,15 +210,15 @@ contract LetterOfCredit is Owned {
         // Remember to zero the pending refund before
         // sending to prevent re-entrancy attacks
         pendingWithdrawals[msg.sender] = 0;
-        if (msg.sender.transfer(amountToWithdraw)) return true;
+        if (msg.sender.send(amountToWithdraw)) return true;
         pendingWithdrawals[msg.sender] = amountToWithdraw;
         return false;
     }
 
     function recoverFunds() onlyBy(importerBank) atStage(Stages.Failed) external returns (bool) {
-        uint toRecover = etherAmount;
+        uint256 toRecover = etherAmount;
         etherAmount = 0;
-        if(msg.sender.transfer(toRecover)) {
+        if(msg.sender.send(toRecover)) {
             return true;
         } else {
             etherAmount = toRecover;
