@@ -227,7 +227,7 @@ contract LetterOfCredit is Owned {
         }
     }
     
-    function getStage() returns (uint s) {
+    function getStage() returns (uint) {
         return uint256(stages);
     }
 
