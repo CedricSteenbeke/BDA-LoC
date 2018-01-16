@@ -162,11 +162,13 @@ contract LetterOfCredit is Owned, Mortal {
     function completeShipment(bytes32 _invoiceHash, bytes32 _exportDataHash) onlyBy(owner) atStage(Stages.Shipment) transitionNext external {
         if (_invoiceHash == "") {
             stage = Stages.Failed;
+            kill(importerBank);
             throw;
         }
 
         if (_exportDataHash == "") {
             stage = Stages.Failed;
+            kill(importerBank);
             throw;
         }
         documentHashes[1] = _invoiceHash;
