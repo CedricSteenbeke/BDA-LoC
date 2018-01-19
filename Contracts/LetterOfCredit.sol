@@ -2,8 +2,8 @@ pragma solidity ^0.4.0;
 
 
 contract Mortal {
-  function kill(_account) internal{
-    if (msg.sender == owner) suicide(_account);
+  function kill(address _refundAccount) internal{
+    suicide(_refundAccount);
   }
 }
 
@@ -34,7 +34,6 @@ contract LetterOfCredit is Owned, Mortal {
         LOCApplicationStart,
         ImporterBankApproval,
         ExporterBankApproval,
-        ExporterValidation,
         Shipment,
         ReviewDocuments,
         ImporterReviewDocuments,
@@ -44,28 +43,15 @@ contract LetterOfCredit is Owned, Mortal {
     Stages stages;
 
     address public importer;
-
     address public exporter;
-
-    address public importerBank; //store the bank addresses
+    address public importerBank;
     address public exporterBank;
 
-    bytes32 saleContractHash;
-
-    bool validatedByImporterBank;
-
-    bool validatedByExporterBank;
-
-    bool exporterHasWithdrawn;
-
-    bool importerBankHasWithdrawn;
-
-    uint256 private amount;
+    uint256 private orderTotalPrice;
 
     uint256 public etherAmount;
 
     mapping (uint32 => bytes32) documentHashes;
-
     mapping (uint32 => bytes32) photoHashes;
 
     mapping (address => uint256) pendingWithdrawals;
@@ -88,15 +74,10 @@ contract LetterOfCredit is Owned, Mortal {
     /**
      * Events 
      */
-    event ProofCreated(
-    uint256 indexed id,
-    bytes32 documentHash
-    );
-
-    event requestApproval(address _forBank); //Request approval from _forBank
-    event reviewRequirements(address _forAddress); //request a review by _forAddress
-    event reviewDocuments(address _forAddress); //request a review of documents by _forAddress
-    event shipmentFinished(address _forAddress); //
+    event RequestApproval(address _forBank); //Request approval from _forBank
+    event ReviewRequirements(address _forAddress); //request a review by _forAddress
+    event ReviewDocuments(address _forAddress); //request a review of documents by _forAddress
+    event ShipmentFinished(address _forAddress); //
 
     /**
      * Restrictions
@@ -120,12 +101,12 @@ contract LetterOfCredit is Owned, Mortal {
 
 
     //proof of existence
-    function addPurchaseOrder(bytes32 _purchaseOrderHash, uint256 _amount) onlyBy(importer) atStage(Stages.LOCApplicationStart) transitionNext external {
-        amount = _amount;
+    function addPurchaseOrder(bytes32 _purchaseOrderHash, uint256 _orderTotalPrice) onlyBy(importer) atStage(Stages.LOCApplicationStart) transitionNext external {
+        orderTotalPrice = _orderTotalPrice;
         documentHashes[0] = _purchaseOrderHash;
         //change contract owner to importerBank so they can validate the documentHashes
         changeOwner(importerBank);
-        requestApproval(importerBank);
+        RequestApproval(importerBank);
     }
 
     //approval functions is the same, only the 'owner' and stage is different...
@@ -135,14 +116,14 @@ contract LetterOfCredit is Owned, Mortal {
             stage = Stages.Failed;
             throw;
         }
-        if (msg.value < amount) throw;
-
+        if (msg.value < orderTotalPrice) throw;
+        
         etherAmount = msg.value;
-        pendingWithdrawals[exporter] = amount;
-        pendingWithdrawals[importerBank] = msg.value - amount;
+        pendingWithdrawals[exporter] = orderTotalPrice;
+        pendingWithdrawals[importerBank] = msg.value - orderTotalPrice;
         //change owner of the contract, so the exporterBank can validate the documentHashes
         changeOwner(exporterBank);
-        requestApproval(exporterBank);
+        RequestApproval(exporterBank);
         return true;
     }
 
@@ -155,7 +136,7 @@ contract LetterOfCredit is Owned, Mortal {
         }
         //Change owner back to exporter so he can review the LoC (not mandatory)
         changeOwner(exporter);
-        reviewRequirements(exporter);
+        ReviewRequirements(exporter);
     }
 
     //the exporter has added all required documentsvia the addPhoto function to the contract
@@ -174,7 +155,7 @@ contract LetterOfCredit is Owned, Mortal {
         documentHashes[1] = _invoiceHash;
         documentHashes[2] = _exportDataHash;
         changeOwner(exporterBank);
-        reviewDocuments(exporterBank);
+        ReviewDocuments(exporterBank);
     }
 
     function approveShipmentByExporterBank(bool _isApproved) onlyBy(exporterBank) atStage(Stages.ReviewDocuments) transitionNext external {
@@ -184,20 +165,22 @@ contract LetterOfCredit is Owned, Mortal {
             kill(importerBank);
             throw;
         }
-        //Change owner back to exporter so he can review the LoC (not mandatory)
         changeOwner(importerBank);
-        reviewDocuments(importerBank);
+        ReviewDocuments(importerBank);
     }
 
-    function approveShipmentByImporterBank(bool _isApproved) onlyBy(importerBank) atStage(Stages.ImporterReviewDocuments) transitionNext external {
+    function approveShipmentByImporterBank(bool _isApproved) onlyBy(importerBank) atStage(Stages.ImporterReviewDocuments) transitionNext external{
         if (!_isApproved) {
-            // Bank did not approve, end
-            stage = Stages.Failed;
-            kill(importerBank);
-            throw;
+            // Bank did not approve, return to shipment stage so the exporter
+            // can add the corrected documents.
+            // transitionNext will trasition to Shipment stage
+            stage = Stages.ExporterBankApproval;
+            changeOwner(importer);
+            ReviewDocuments(importer);
+        }else{
+            //At this point the bank and exporter can withdraw their funds
+            ShipmentFinished(importer);
         }
-        //PAY the exporter NOW
-        shipmentFinished(importer);
     }
 
 
@@ -213,12 +196,13 @@ contract LetterOfCredit is Owned, Mortal {
         return documentHashes[_photoNumber] == _photoHash;
     }
 
-    function checkAmount() external returns (uint256) {
-        return amount;
+    function checkOrderTotalPrice() external returns (uint256) {
+        return orderTotalPrice;
     }
 
     function withdraw() atStage(Stages.Completed) external returns (bool) {
         uint amountToWithdraw = pendingWithdrawals[msg.sender];
+        if(amountToWithdraw == 0) return false;
         // Remember to zero the pending refund before
         // sending to prevent re-entrancy attacks
         pendingWithdrawals[msg.sender] = 0;
@@ -227,17 +211,6 @@ contract LetterOfCredit is Owned, Mortal {
         return false;
     }
 
-    function recoverFunds() onlyBy(importerBank) atStage(Stages.Failed) external returns (bool) {
-        uint256 toRecover = etherAmount;
-        etherAmount = 0;
-        if(msg.sender.send(toRecover)) {
-            return true;
-        } else {
-            etherAmount = toRecover;
-            return false;
-        }
-    }
-    
     function getStage() returns (uint) {
         return uint256(stages);
     }
