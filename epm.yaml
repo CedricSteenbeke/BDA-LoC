@@ -1,0 +1,230 @@
+jobs:
+        - name: importerAddress
+          job:
+                  set:
+                          val: 71DB3EB4F0CBA2B5BD4F5B9C8D0C5B03C7FC3DC8
+        - name: exporterAddress
+          job:
+                  set:
+                          val: B1366DB32163F774510B4714493B3046A943324C
+        - name: importerBank
+          job:
+                  set:
+                          val: 57102ACE4F23D0762B03290C17A9DD9E08E0316E
+        - name: exporterBank
+          job:
+                  set:
+                          val: 8F6495B4C3F6021EA81EF92AB4D1E44DB9EE31D1
+        - name: contractValue
+          job:
+                  set:
+                          val: 20
+
+        - name: purchaseOrderHash
+          job:
+                  set:
+                          val: 54b0c58c7ce9f2a8b551351102ee0938
+
+        - name: photoHashOne
+          job:
+                  set:
+                          val: 54b0c58c7ce9f2a8b551351102eaaaaa
+
+        - name: deployLOC
+          job:
+                  deploy:
+                          contract: LetterOfCredit.sol
+                          data:
+                                  - $exporterAddress
+                                  - $importerBank
+                                  - $exporterBank
+
+        - name: deployLOCFailureTest
+          job:
+                  deploy: 
+                          contract: LetterOfCredit.sol
+                          data:
+                                  - $exporterAddress
+                                  - $importerBank
+                                  - $exporterBank
+
+        - name: queryBank
+          job: 
+            query-account:
+                  account: $importerBank
+                  field: balance
+
+        - name: queryExporter
+          job:
+                  query-account:
+                          account: $exporterAddress
+                          field: balance
+
+        - name: addPurchaseOrder
+          job:
+                  call:
+                         destination: $deployLOCFailureTest
+                         function: addPurchaseOrder
+                         data:
+                                  - $purchaseOrderHash
+                                  - $contractValue
+
+        - name: switchToImpBank
+          job: 
+                  account: 
+                          address: $importerBank
+
+        - name: sendEthPurchaseOrderImpBank
+          job:
+                  send:
+                          destination: $deployLOC
+                          amount: 21
+        
+        - name: switchToExporter
+          job:
+                  account:
+                          address: $exporterAddress
+
+        - name: tryEarlyWithdraw
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: withdraw
+
+        - name: queryExporter1
+          job:
+                  query-account:
+                          account: $exporterAddress
+                          field: balance
+
+        - name: assertEarlyWithdraw
+          job:
+                  assert:
+                          key: $queryExporter
+                          relationship: eq
+                          val: $queryExporter1
+
+        - name: callApprovePOImpBank
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: approvePurchaseOrderImporterBank
+                          data:
+                                  - true
+        - name: checkBankBalance
+          job:
+                  query-account:
+                        account: $importerBank
+                        field: balance
+
+
+        - name: callApprovePOImpBankFail
+          job:
+                  call:
+                          destination: $deployLOCFailureTest
+                          function: approvePurchaseOrderImporterBank
+                          data:
+                                  - false
+
+
+        - name: switchToExpBank
+          job:
+                  account:
+                          address: $exporterBank 
+
+        - name: approvePurchaseOrderExpBank
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: approvePurchaseOrderExporterBank
+                          data: 
+                                  - true
+        
+        - name: switchToImporter
+          job:
+                  account: 
+                          address: $importerAddress
+
+        - name: addPhotoEvidenceOne
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: addPhotoEvidence
+                          data:
+                                  - 0
+                                  - $photoHashOne
+
+        - name: completeShipmentCall
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: completeShipment
+                          data:
+                                  - $invoiceHash
+                                  - $exportDataHash
+        - name: switchToExpBank2
+          job:
+                  account:
+                          address: $exporterBank
+
+        - name: approveShipmentByExpBank
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: approveShipmentByExporterBank
+                          data:
+                                  - true
+
+        - name: switchToImporterBank2
+          job:
+                  account:
+                          address: $importerBank
+
+        - name: approveShipmentByImpBank
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: approveShipmentByImporterBank
+                          data:
+                                  - true
+
+        - name: switchToExporter2
+          job:
+                  account:
+                          address: $exporterAddress
+
+        - name: exporterWithdraw
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: withdraw
+
+        - name: switchToExporter3
+          job: 
+                  account:
+                          address: $exporterBank
+
+        - name: exporterBankWithdraw
+          job:
+                  call:
+                          destination: $deployLOC
+                          function: withdraw
+
+        - name: queryExporter2
+          job:
+                  query-account:
+                          account: $exporterAddress
+                          field: balance
+
+        - name: queryImpBank2
+          job:
+                  query-account:
+                          account: $importerBank
+                          field: balance
+
+        - name: assertExporterBalance
+          job:
+                  assert:
+                          key: $queryExporter2
+                          relation: lt
+                          val: $queryExporter
