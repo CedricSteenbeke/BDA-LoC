@@ -1,33 +1,5 @@
 pragma solidity ^0.4.0;
 
-
-contract Mortal {
-  function kill(address _refundAccount) internal{
-    suicide(_refundAccount);
-  }
-}
-
-contract Owned {
-    address owner;
-
-    modifier onlyOwner() {
-        if (msg.sender == owner) _;
-    }
-
-    function owned() {
-        owner = msg.sender;
-    }
-
-    function changeOwner(address newOwner) onlyOwner {
-        owner = newOwner;
-    }
-
-    function getOwner() constant returns (address){
-        return owner;
-    }
-}
-
-
 contract LetterOfCredit is Owned, Mortal {
     //State Machine, stages in the LoC
     enum Stages {
