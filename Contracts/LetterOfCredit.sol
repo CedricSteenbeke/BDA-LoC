@@ -1,6 +1,6 @@
 pragma solidity ^0.4.0;
-import "mortal.sol"
-import "owned.sol"
+import "Mortal.sol"
+import "Owned.sol"
 
 contract LetterOfCredit is Owned, Mortal {
     //State Machine, stages in the LoC
