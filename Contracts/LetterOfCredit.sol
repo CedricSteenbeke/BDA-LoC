@@ -184,7 +184,7 @@ contract LetterOfCredit is Owned, Mortal {
     }
 
 
-    function addPhotoEvidence(uint32 photoNumber, bytes32 photoHash) onlyBy(owner) atStage(Stages.Shipment) external {
+    function addPhotoEvidence(uint32 photoNumber, bytes32 photoHash) onlyBy(exporter) atStage(Stages.Shipment) external {
         photoHashes[photoNumber] = photoHash;
     }
 
